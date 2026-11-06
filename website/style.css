@@ -15,7 +15,8 @@
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
-html { scroll-behavior: smooth; scroll-padding-top: 80px; }
+html { scroll-behavior: smooth; scroll-padding-top: 80px; overflow-x: clip; }
+body { overflow-x: clip; }
 body {
   font-family: "Inter", system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
   background: var(--bg);
@@ -164,11 +165,13 @@ table { width: 100%; border-collapse: collapse; }
 .progress div { height: 100%; width: 0; background: linear-gradient(90deg, var(--accent), var(--accent-2)); transition: width .4s; }
 
 /* STEPS */
-.steps { display: grid; gap: 1rem; }
-.step { display: flex; gap: 1rem; align-items: flex-start; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 1.2rem; }
+.steps { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; }
+.step { min-width: 0; display: flex; gap: 1rem; align-items: flex-start; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 1.2rem; }
 .step > span { flex: none; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; background: linear-gradient(135deg, var(--accent), var(--accent-2)); }
 .step > div { flex: 1; min-width: 0; }
 .step h4 { margin-bottom: .5rem; }
+.step .code { white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }
+.hero-grid > *, .two-col > *, .demo > *, .cards > *, .stats > * { min-width: 0; }
 
 /* FOOTER */
 .footer { margin-top: 5rem; border-top: 1px solid var(--line); padding: 2rem 0; background: var(--bg-2); }
@@ -177,7 +180,7 @@ table { width: 100%; border-collapse: collapse; }
 
 /* RESPONSIVE */
 @media (max-width: 960px) {
-  .hero-grid, .two-col, .demo { grid-template-columns: 1fr; }
+  .hero-grid, .two-col, .demo { grid-template-columns: minmax(0, 1fr); }
   .cards { grid-template-columns: repeat(2, 1fr); }
   .stats { grid-template-columns: repeat(2, 1fr); }
   .nav nav { display: none; }
@@ -186,4 +189,11 @@ table { width: 100%; border-collapse: collapse; }
 @media (max-width: 560px) {
   .cards, .stats { grid-template-columns: 1fr; }
   .hero { padding-top: 3rem; }
+  .step { padding: 1rem; gap: .75rem; }
+  .step > span { width: 28px; height: 28px; font-size: .85rem; }
+  .code, .code.small { font-size: .72rem; padding: .85rem .9rem; }
+  .terminal pre { font-size: .72rem; }
+}
+@media (max-width: 400px) {
+  .step { flex-direction: column; }
 }
