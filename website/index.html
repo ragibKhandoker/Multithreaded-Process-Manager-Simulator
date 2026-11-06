@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Multithreaded Process Manager Simulator</title>
+  <meta name="description" content="A C + POSIX threads simulator of how an operating system manages processes: fork, exit, wait, kill and a monitor thread over a shared process table." />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧵</text></svg>" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <header class="nav">
+    <div class="container nav-inner">
+      <a href="#top" class="brand"><span class="brand-dot"></span>pm_sim</a>
+      <nav>
+        <a href="#purpose">Purpose</a>
+        <a href="#architecture">Architecture</a>
+        <a href="#api">API</a>
+        <a href="#demo">Demo</a>
+        <a href="#output">Output</a>
+        <a href="#run">Run it</a>
+      </nav>
+      <a class="btn btn-small" href="https://github.com/ragibKhandoker/Multithreaded-Process-Manager-Simulator" target="_blank" rel="noopener">GitHub ↗</a>
+    </div>
+  </header>
+
+  <!-- HERO -->
+  <section class="hero" id="top">
+    <div class="container hero-grid">
+      <div>
+        <span class="eyebrow">Operating Systems Project · Section 9 · Group 9</span>
+        <h1>Multithreaded <span class="grad">Process Manager</span> Simulator</h1>
+        <p class="lead">
+          A small operating-system “kernel” written in <strong>C</strong> with <strong>POSIX threads</strong>.
+          It keeps a shared <em>process table</em>, lets several threads create, terminate, wait for and kill
+          processes at the same time, and uses a <em>monitor thread</em> to record every change safely.
+        </p>
+        <div class="hero-cta">
+          <a class="btn" href="#demo">▶ Watch the simulation</a>
+          <a class="btn btn-ghost" href="#run">How to run</a>
+        </div>
+        <ul class="tags">
+          <li>C</li><li>pthreads</li><li>Mutex</li><li>Condition variable</li><li>PCB</li><li>Linux</li>
+        </ul>
+      </div>
+      <div class="terminal">
+        <div class="terminal-bar"><span></span><span></span><span></span><b>bash — pm_sim</b></div>
+<pre><span class="c-prompt">$</span> gcc pm_sim.c -o pm_sim -pthread
+<span class="c-prompt">$</span> ./pm_sim thread1.txt thread2.txt
+<span class="c-ok">=== Process Manager Started ===</span>
+Init process created (PID=1)
+
+PID      PPID     STATE        EXIT_STATUS
+1        0        <span class="c-run">RUNNING</span>      -
+Thread thread1.txt: fork 1
+Thread thread2.txt: fork 1
+Thread thread1.txt: fork 1
+Thread thread1.txt: wait 1 -1
+Thread thread1.txt: wait returned -1
+...
+Thread thread2.txt: exit 2 10
+2        1        <span class="c-zom">ZOMBIE</span>       10
+<span class="c-ok">=== All workers finished ===</span></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- STATS -->
+  <section class="stats container">
+    <div class="stat"><b>64</b><span>max processes</span></div>
+    <div class="stat"><b>5</b><span>system calls simulated</span></div>
+    <div class="stat"><b>N + 1</b><span>threads (N workers + monitor)</span></div>
+    <div class="stat"><b>1</b><span>mutex guarding the table</span></div>
+  </section>
+
+  <!-- PURPOSE -->
+  <section id="purpose" class="section container">
+    <h2 class="section-title"><span>01</span> Purpose</h2>
+    <p class="section-lead">
+      Real operating systems constantly create and destroy processes while many CPUs touch the same kernel data.
+      This project recreates that problem in a safe, observable way so the core ideas can be studied hands-on.
+    </p>
+    <div class="cards">
+      <article class="card">
+        <div class="icon">🧠</div>
+        <h3>Process lifecycle</h3>
+        <p>See how a process is born with <code>fork</code>, becomes a <strong>zombie</strong> on <code>exit</code>, and is finally reaped by its parent with <code>wait</code>.</p>
+      </article>
+      <article class="card">
+        <div class="icon">🔀</div>
+        <h3>Concurrency</h3>
+        <p>Multiple worker threads run their own scripts in parallel and all modify one shared process table at the same time.</p>
+      </article>
+      <article class="card">
+        <div class="icon">🔐</div>
+        <h3>Synchronization</h3>
+        <p>A <code>pthread_mutex</code> prevents race conditions and a <code>pthread_cond</code> wakes the monitor only when the table actually changes.</p>
+      </article>
+      <article class="card">
+        <div class="icon">📜</div>
+        <h3>Reproducible tests</h3>
+        <p>Behaviour is driven by plain-text script files, so any scenario can be written, replayed and compared with the snapshot log.</p>
+      </article>
+    </div>
+  </section>
+
+  <!-- ARCHITECTURE -->
+  <section id="architecture" class="section container">
+    <h2 class="section-title"><span>02</span> Architecture</h2>
+    <p class="section-lead">One process table in shared memory, many threads that use it, and one lock that keeps it consistent.</p>
+
+    <div class="arch">
+      <div class="arch-col">
+        <div class="arch-box file">thread1.txt</div>
+        <div class="arch-box file">thread2.txt</div>
+        <div class="arch-box file muted">threadN.txt</div>
+      </div>
+      <div class="arch-arrow">→</div>
+      <div class="arch-col">
+        <div class="arch-box worker">Worker thread 1</div>
+        <div class="arch-box worker">Worker thread 2</div>
+        <div class="arch-box worker muted">Worker thread N</div>
+      </div>
+      <div class="arch-arrow">→<small>pm_fork / pm_exit<br/>pm_wait / pm_kill / pm_ps</small></div>
+      <div class="arch-col">
+        <div class="arch-box table">
+          <b>Process Table</b>
+          <small>PCB table[64]</small>
+          <span class="lock">🔒 pthread_mutex_t lock</span>
+        </div>
+      </div>
+      <div class="arch-arrow">→<small>pthread_cond_signal</small></div>
+      <div class="arch-col">
+        <div class="arch-box monitor">Monitor thread</div>
+        <div class="arch-arrow down">↓</div>
+        <div class="arch-box file">snapshots.txt</div>
+      </div>
+    </div>
+
+    <div class="two-col">
+      <div>
+        <h3>Process Control Block (PCB)</h3>
+        <p>Every simulated process is one entry in a fixed array. PID 1 is the <em>init</em> process created at start-up.</p>
+<pre class="code"><span class="k">typedef struct</span> {
+    <span class="t">int</span> pid;           <span class="cm">// Process ID</span>
+    <span class="t">int</span> ppid;          <span class="cm">// Parent PID</span>
+    <span class="t">int</span> state;         <span class="cm">// RUNNING / BLOCKED / ZOMBIE / DEAD</span>
+    <span class="t">int</span> exit_status;   <span class="cm">// Exit code</span>
+    <span class="t">int</span> children[<span class="n">10</span>];  <span class="cm">// Child PIDs</span>
+    <span class="t">int</span> child_count;   <span class="cm">// Number of children</span>
+} PCB;
+
+PCB table[<span class="n">64</span>];
+pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t  monitor_cond = PTHREAD_COND_INITIALIZER;</pre>
+      </div>
+      <div>
+        <h3>Components</h3>
+        <ul class="list">
+          <li><b>Process manager</b> — the PCB table plus helper functions <code>find()</code>, <code>add_child()</code>, <code>remove_child()</code>.</li>
+          <li><b>Worker threads</b> — one per script file; each reads commands line by line and calls the matching <code>pm_*</code> function.</li>
+          <li><b>Script interpreter</b> — parses <code>fork</code>, <code>exit</code>, <code>wait</code>, <code>kill</code>, <code>sleep</code>, <code>ps</code>.</li>
+          <li><b>Monitor thread</b> — sleeps on a condition variable and appends a full table snapshot to <code>snapshots.txt</code> after every change.</li>
+        </ul>
+      </div>
+    </div>
+
+    <h3 class="mt">Process states</h3>
+    <div class="states">
+      <div class="state s-run"><b>RUNNING</b><small>created by fork</small></div>
+      <div class="state-arrow">exit / kill →</div>
+      <div class="state s-zom"><b>ZOMBIE</b><small>finished, status kept</small></div>
+      <div class="state-arrow">parent wait →</div>
+      <div class="state s-dead"><b>DEAD</b><small>reaped, hidden from ps</small></div>
+    </div>
+  </section>
+
+  <!-- API -->
+  <section id="api" class="section container">
+    <h2 class="section-title"><span>03</span> Simulated system calls &amp; script commands</h2>
+    <p class="section-lead">Every function locks the mutex first, edits the table, signals the monitor, then unlocks.</p>
+    <div class="table-wrap">
+      <table class="api">
+        <thead><tr><th>Script line</th><th>Function</th><th>What it does</th><th>Returns</th></tr></thead>
+        <tbody>
+          <tr><td><code>fork &lt;ppid&gt;</code></td><td><code>pm_fork()</code></td><td>Creates a new RUNNING child under a RUNNING parent and gives it the next PID.</td><td>child PID, or -1 if table full / bad parent</td></tr>
+          <tr><td><code>exit &lt;pid&gt; &lt;status&gt;</code></td><td><code>pm_exit()</code></td><td>Turns the process into a ZOMBIE and stores its exit status.</td><td>0, or -1 if PID not found</td></tr>
+          <tr><td><code>wait &lt;ppid&gt; &lt;pid|-1&gt;</code></td><td><code>pm_wait()</code></td><td>Reaps a ZOMBIE child (a specific one or any with -1) and marks it DEAD.</td><td>child's exit status, or -1 if no zombie child</td></tr>
+          <tr><td><code>kill &lt;pid&gt;</code></td><td><code>pm_kill()</code></td><td>Force-terminates a process: ZOMBIE with exit status 9 (like SIGKILL).</td><td>0, or -1 if PID not found</td></tr>
+          <tr><td><code>ps</code></td><td><code>pm_ps()</code></td><td>Prints the current process table to the console (DEAD entries hidden).</td><td>—</td></tr>
+          <tr><td><code>sleep &lt;ms&gt;</code></td><td><code>usleep()</code></td><td>Pauses only this worker thread, letting others interleave.</td><td>—</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- DEMO -->
+  <section id="demo" class="section container">
+    <h2 class="section-title"><span>04</span> Interactive demo</h2>
+    <p class="section-lead">
+      Replay of the sample run <code>./pm_sim thread1.txt thread2.txt</code>. Both scripts run at the same time;
+      <code>sleep</code> controls how their commands interleave.
+    </p>
+
+    <div class="demo">
+      <div class="scripts">
+        <div class="script" id="script-t1">
+          <div class="script-head">Thread 1 · thread1.txt</div>
+          <ol>
+            <li data-step="1">fork 1</li>
+            <li data-step="1">sleep 200</li>
+            <li data-step="3">fork 1</li>
+            <li data-step="4">wait 1 -1</li>
+            <li data-step="4">ps</li>
+          </ol>
+        </div>
+        <div class="script" id="script-t2">
+          <div class="script-head">Thread 2 · thread2.txt</div>
+          <ol>
+            <li data-step="1">sleep 100</li>
+            <li data-step="2">fork 1</li>
+            <li data-step="2">sleep 300</li>
+            <li data-step="5">exit 2 10</li>
+            <li data-step="5">ps</li>
+          </ol>
+        </div>
+      </div>
+
+      <div class="demo-main">
+        <div class="demo-controls">
+          <button class="btn btn-small" id="prev">◀ Prev</button>
+          <span class="clock" id="clock">t = 0 ms</span>
+          <button class="btn btn-small" id="next">Next ▶</button>
+          <button class="btn btn-small btn-ghost" id="play">⟲ Auto-play</button>
+        </div>
+        <p class="event" id="event">Start: only the init process (PID 1) exists.</p>
+        <table class="ptable">
+          <thead><tr><th>PID</th><th>PPID</th><th>STATE</th><th>EXIT_STATUS</th></tr></thead>
+          <tbody id="ptable-body"></tbody>
+        </table>
+        <div class="progress"><div id="progress-bar"></div></div>
+      </div>
+    </div>
+    <noscript><p class="note">Enable JavaScript to use the step-by-step replay. The full output is shown below.</p></noscript>
+  </section>
+
+  <!-- OUTPUT -->
+  <section id="output" class="section container">
+    <h2 class="section-title"><span>05</span> Output</h2>
+    <p class="section-lead">The program produces two kinds of output.</p>
+
+    <div class="two-col">
+      <div>
+        <h3>1. Console (stdout)</h3>
+        <p>Each worker logs every command it executes; <code>ps</code> prints the table.</p>
+<pre class="code small">=== Process Manager Started ===
+Init process created (PID=1)
+
+PID      PPID     STATE        EXIT_STATUS
+1        0        RUNNING      -
+Thread thread1.txt: fork 1
+Thread thread2.txt: fork 1
+Thread thread1.txt: fork 1
+Thread thread1.txt: wait 1 -1
+Thread thread1.txt: wait returned -1
+
+PID      PPID     STATE        EXIT_STATUS
+1        0        RUNNING      -
+2        1        RUNNING      -
+3        1        RUNNING      -
+4        1        RUNNING      -
+Thread thread2.txt: exit 2 10
+
+PID      PPID     STATE        EXIT_STATUS
+1        0        RUNNING      -
+2        1        ZOMBIE       10
+3        1        RUNNING      -
+4        1        RUNNING      -
+
+=== All workers finished ===</pre>
+        <p class="note">Exact line order can change between runs — that is the nature of concurrent threads.</p>
+      </div>
+      <div>
+        <h3>2. snapshots.txt (monitor thread)</h3>
+        <p>Actual file produced by the sample run, included in the repository:</p>
+<pre class="code small">Process Table Snapshot:
+PID      PPID     STATE        EXIT_STATUS
+1        0        RUNNING      -
+2        1        RUNNING      -
+
+Process Table Snapshot:
+PID      PPID     STATE        EXIT_STATUS
+1        0        RUNNING      -
+2        1        RUNNING      -
+
+Process Table Snapshot:
+PID      PPID     STATE        EXIT_STATUS
+1        0        RUNNING      -
+2        1        RUNNING      -
+3        1        RUNNING      -
+
+Process Table Snapshot:
+PID      PPID     STATE        EXIT_STATUS
+1        0        RUNNING      -
+2        1        RUNNING      -
+3        1        RUNNING      -
+4        1        RUNNING      -
+
+Process Table Snapshot:
+PID      PPID     STATE        EXIT_STATUS
+1        0        RUNNING      -
+2        1        ZOMBIE       10
+3        1        RUNNING      -
+4        1        RUNNING      -</pre>
+      </div>
+    </div>
+
+    <h3 class="mt">Reading the result</h3>
+    <ul class="list">
+      <li><b>Three forks → PIDs 2, 3, 4.</b> PIDs are handed out in order, regardless of which thread asks first.</li>
+      <li><b><code>wait 1 -1</code> returned -1</b> at t≈200 ms because no child had exited yet — the wait is non-blocking.</li>
+      <li><b>PID 2 became a ZOMBIE with status 10</b> at t≈400 ms. Nobody waited for it afterwards, so it stays a zombie — exactly what happens in a real OS when a parent never calls <code>wait()</code>.</li>
+      <li><b>The first two snapshots are identical.</b> Thread 1's fork happened before the monitor wrote its initial snapshot, then the pending change signal produced a second copy. This is a visible example of thread scheduling order.</li>
+    </ul>
+  </section>
+
+  <!-- RUN -->
+  <section id="run" class="section container">
+    <h2 class="section-title"><span>06</span> Run it yourself</h2>
+    <div class="steps">
+      <div class="step"><span>1</span><div><h4>Clone</h4><pre class="code small">git clone https://github.com/ragibKhandoker/Multithreaded-Process-Manager-Simulator.git
+cd Multithreaded-Process-Manager-Simulator/Project_Sec9_22301202_Group_9/pm_sim</pre></div></div>
+      <div class="step"><span>2</span><div><h4>Compile (Linux / WSL / macOS)</h4><pre class="code small">gcc pm_sim.c -o pm_sim -pthread</pre></div></div>
+      <div class="step"><span>3</span><div><h4>Run with one script per thread</h4><pre class="code small">./pm_sim thread1.txt thread2.txt
+cat snapshots.txt</pre></div></div>
+    </div>
+    <p class="note">The program needs POSIX threads, so on Windows use WSL. The monitor thread runs forever by design, so the program may need <kbd>Ctrl</kbd>+<kbd>C</kbd> after <em>“All workers finished”</em>.</p>
+
+    <h3 class="mt">Design notes &amp; limits</h3>
+    <ul class="list">
+      <li>Up to <b>64</b> processes in total and <b>10</b> children per process.</li>
+      <li>PIDs are never reused; DEAD entries stay in the array but are hidden from output.</li>
+      <li><code>pm_wait()</code> is non-blocking: it returns -1 immediately when no zombie child exists. The <code>BLOCKED</code> state is defined for future use.</li>
+      <li>Ideas for extension: blocking wait, orphan re-parenting to init, PID reuse, a clean monitor shutdown and timestamps in the log.</li>
+    </ul>
+  </section>
+
+  <footer class="footer">
+    <div class="container footer-inner">
+      <div>
+        <b>Multithreaded Process Manager Simulator</b>
+        <p>Operating Systems course project · Section 9 · Group 9 · ID 22301202</p>
+      </div>
+      <a class="btn btn-small" href="https://github.com/ragibKhandoker/Multithreaded-Process-Manager-Simulator" target="_blank" rel="noopener">View source on GitHub ↗</a>
+    </div>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>
